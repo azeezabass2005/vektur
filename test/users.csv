@@ -1,11 +1,11 @@
-S/N,Name,Email,Gender,Institution,Current Year,Status,Join Date
-1,olalekan Owolabi,owolabihammed3600@gmail.com,Male,Obafemi Awolowo University,Year 2,Verified,August 3rd 2025
-2,Hammed Owolabi,hoowolabi@student.oauife.edu.ng,Male,University of Ilorin,Year 2,Verified,August 3rd 2025
-3,Chocolate Caramel,chocolatecaramel@gmail.com,Male,University of Ibadan ,Year 2,Verified,August 5th 2025
-4,Abass Azeez,azeezabass2005@gmail.com,Male,Belingham University,Year 2,Verified,August 5th 2025
-5,James Doe,owolabihammed36@gmail.com,Male,University of Ilorin,Year 3,Verified,August 6th 2025
-6,Farouk Mustapha,mustaphaayo41@gmail.com,Male,Obafemi Awolowo University,Year graduate,Verified,August 17th 2025
-7,Khadijah  Lawal,owolabihammed3600+3@gmail.com,Female,Ladoke Akintola University of Technology (LAUTECH),Year 2,Pending,August 20th 2025
-8,ibraheem rufai,rolawale95@gmail.com,Male,Obafemi Awolowo University,Year 4,Verified,September 2nd 2025
-9,Hammed Owolabi,owolabihammed360@gmail.com,Male,Ladoke Akintola University of Technology (LAUTECH),Year 5,Verified,September 7th 2025
-10,Hammed Owolabi,owolabihammed3600+1@gmail.com,Male,Obafemi Awolowo University,Year 4,Pending,September 11th 2025
+S/N,Name,Email,Gender,Institution,Current Year,Status,Join Date,IsVerified
+1,olalekan Owolabi,owolabihammed3600@gmail.com,Male,Obafemi Awolowo University,Year 2,Verified,August 3rd 2025,true
+2,Hammed Owolabi,hoowolabi@student.oauife.edu.ng,Male,University of Ilorin,Year 2,Verified,August 3rd 2025,true
+3,Chocolate Caramel,chocolatecaramel@gmail.com,Male,University of Ibadan ,Year 2,Verified,August 5th 2025,true
+4,Abass Azeez,azeezabass2005@gmail.com,Male,Belingham University,Year 2,Verified,August 5th 2025,true
+5,James Doe,owolabihammed36@gmail.com,Male,University of Ilorin,Year 3,Verified,August 6th 2025,true
+6,Farouk Mustapha,mustaphaayo41@gmail.com,Male,Obafemi Awolowo University,Year graduate,Verified,August 17th 2025,true
+7,Khadijah  Lawal,owolabihammed3600+3@gmail.com,Female,Ladoke Akintola University of Technology (LAUTECH),Year 2,Pending,August 20th 2025,false
+8,ibraheem rufai,rolawale95@gmail.com,Male,Obafemi Awolowo University,Year 4,Verified,September 2nd 2025,true
+9,Hammed Owolabi,owolabihammed360@gmail.com,Male,Ladoke Akintola University of Technology (LAUTECH),Year 5,Verified,September 7th 2025,true
+10,Hammed Owolabi,owolabihammed3600+1@gmail.com,Male,Obafemi Awolowo University,Year 4,Pending,September 11th 2025,false

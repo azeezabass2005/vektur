@@ -116,11 +116,11 @@ impl CsvDataSource {
         println!("This is the columnar_data: {:?}", columnar_data);
         for (index, data) in columnar_data.iter().enumerate() {
 
-            let is_all_empty = data.iter().all(move |data| {
+            let is_all_empty = data.iter().all(|data| {
                 data.is_empty()
             });
 
-            let is_float = data.iter().all(move |data| {
+            let is_float = data.iter().all(|data| {
                 if data.is_empty() { 
                     return true;
                 };
@@ -130,7 +130,7 @@ impl CsvDataSource {
                     Err(_error) => false,
                 }
             });
-            let is_int = data.iter().all(move |data| {
+            let is_int = data.iter().all(|data| {
                 if data.is_empty() { 
                     return true;
                 };
@@ -140,14 +140,25 @@ impl CsvDataSource {
                     Err(_error) => false,
                 }
             });
+
+            let is_boolean = data.iter().all(|data| {
+                if data.is_empty() {
+                    return true;
+                };
+                let boolean = data.to_lowercase().parse::<bool>();
+                match boolean {
+                    Ok(_boolean) => true,
+                    Err(_error) => false,
+                }
+            });
                 
             if !is_all_empty {
                 if is_int {
                     types[index] = DataType::Int32;
                 } else if is_float {
                     types[index] = DataType::Float64;
-                } else {
-                    // println!("This is not number: {:?} {:?}", index, data);
+                } else if is_boolean {
+                    types[index] = DataType::Bool;
                 }
             }
 
