@@ -1,6 +1,6 @@
-use std::{ffi::OsStr, fs, path::Path};
+use std::{ffi::OsStr, fs::{File}, io::{BufRead, BufReader}, path::Path};
 
-use crate::{DataSource, Field, RecordBatch, errors::QueryError};
+use crate::{DataSource, DataType, Field, RecordBatch, errors::QueryError};
 
 #[derive(Debug)]
 pub struct CsvDataSource {
@@ -32,7 +32,7 @@ impl CsvDataSource {
         }
         match path.extension() {
             Some(ext) => {
-                if ext != OsStr::new("csv") {
+                if ext.to_ascii_lowercase() != OsStr::new("csv") {
                     return Err("Please the file should be a csv file".to_string());
                 };
             },
@@ -41,20 +41,118 @@ impl CsvDataSource {
             }
         };
 
-        let file = fs::read_to_string(path);
-    
-        match file {
-            Ok(file) => {
-                // Just printing the file to get familiar with it
-                println!("{:?}", file);
-                // I will still work on parsing the file here and getting the schema
-                let fields: Vec<Field> =  Vec::new();
-                Ok(fields)
-            },
-            Err(_) => {
-                Err("Failed to read file to string".to_string())
+        if let Ok(file) = File::open(path) {
+            let mut buf_file = BufReader::new(file);
+            println!("This is the buf_file {:?}", buf_file);
+
+            let mut lines = Vec::new();
+            let mut line = String::new();
+            for _ in 0..101 {
+                line.clear();
+                if let Ok(val) = buf_file.read_line(&mut line) {
+                    if val == 0 {
+                        break;
+                    } else {
+                        lines.push(line.clone());
+                    }
+                } else {
+                    return Err("Failed to read file buffer".to_string())
+                }
             }
+
+            let first_line = lines.get(0);
+            match first_line {
+                Some(line) => {
+                    println!("This is the first line: {:?}", line);
+                    if let Some(_second_line) = lines.get(1) {
+                        let types = Self::detect_types(&lines, line.trim().split(",").collect::<Vec<&str>>().len());
+                        Ok(line.trim().split(",").enumerate().map(move |(i, header)| {
+                            Field {
+                                name: header.trim().to_string(),
+                                field_type: types[i],
+                                is_nullable: true
+                            }
+                        }).collect::<Vec<Field>>())
+                    } else {
+                        Ok(line.trim().split(",").map(move |header| {
+                            Field {
+                                name: header.trim().to_string(),
+                                field_type: DataType::String,
+                                is_nullable: true
+                            }
+                        }).collect::<Vec<Field>>())
+                        
+                    }
+                },
+                None => {
+                    Err("Failed to infer schema".to_string())
+                }
+            }
+
+        } else {
+            Err("Failed to open file".to_string())
         }
+
+
+    }
+
+    fn detect_types(lines: &Vec<String>, columns: usize) -> Vec<DataType> {
+        let mut types: Vec<DataType> = Vec::with_capacity(columns);
+        let mut columnar_data: Vec<Vec<&str>> = Vec::with_capacity(columns);
+        for _ in 0..columns {
+            types.push(DataType::String);
+            columnar_data.push(vec![]);
+        }
+        for line in lines.iter().skip(1).take(100) {
+            let line = line.trim().split(",").collect::<Vec<&str>>();
+            for i in 0..columns {
+                if let Some(item) = line.get(i) {
+                    columnar_data[i].push(item.trim());
+                } else {
+                    columnar_data[i].push("");
+                }
+            };
+        };
+        println!("This is the columnar_data: {:?}", columnar_data);
+        for (index, data) in columnar_data.iter().enumerate() {
+
+            let is_all_empty = data.iter().all(move |data| {
+                data.is_empty()
+            });
+
+            let is_float = data.iter().all(move |data| {
+                if data.is_empty() { 
+                    return true;
+                };
+                let number = data.parse::<f64>();
+                match number {
+                    Ok(_number) => true,
+                    Err(_error) => false,
+                }
+            });
+            let is_int = data.iter().all(move |data| {
+                if data.is_empty() { 
+                    return true;
+                };
+                let number = data.parse::<i32>();
+                match number {
+                    Ok(_number) => true,
+                    Err(_error) => false,
+                }
+            });
+                
+            if !is_all_empty {
+                if is_int {
+                    types[index] = DataType::Int32;
+                } else if is_float {
+                    types[index] = DataType::Float64;
+                } else {
+                    // println!("This is not number: {:?} {:?}", index, data);
+                }
+            }
+
+        };
+        types
     }
 }
 
