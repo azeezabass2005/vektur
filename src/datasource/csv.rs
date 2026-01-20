@@ -130,9 +130,10 @@ impl Iterator for CsvBatchIterator {
             }
         })
         .collect::<Vec<ColumnVector>>();
-        
-        Some(Ok(RecordBatch { schema: Schema { fields: self.schema.clone() }, columns }))
 
+        let schema = Schema::new(self.schema.clone());
+        Some(RecordBatch::new(schema, columns))
+        
     }
 }
 
