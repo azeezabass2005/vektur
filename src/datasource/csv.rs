@@ -1,6 +1,8 @@
-use std::{ffi::{OsString}, fs::File, io::{BufRead, BufReader}, path::{Path, PathBuf}};
+use std::{ffi::OsString, fs::File, io::{BufRead, BufReader}, iter, path::{Path, PathBuf}};
 
-use crate::{DataSource, DataType, Field, RecordBatch, errors::QueryError};
+use clap::Error;
+
+use crate::{ColumnVector, DataSource, DataType, Field, RecordBatch, ScalarValue, Schema, errors::QueryError};
 
 #[derive(Debug)]
 pub struct ValidCsvPath(PathBuf);
@@ -15,6 +17,122 @@ impl ValidCsvPath {
             return Err(QueryError::DataSourceError { message: "Not a CSV file".into() });
         }
         Ok(Self(path.to_path_buf()))
+    }
+}
+
+struct CsvBatchIterator {
+    reader: BufReader<File>,
+    schema: Vec<Field>,
+    batch_size: usize,
+    finished: bool,
+}
+
+impl Iterator for CsvBatchIterator {
+    type Item = Result<RecordBatch, QueryError>;
+    
+    fn next(&mut self) -> Option<Self::Item> {        
+        if self.finished {
+            return None;
+        }
+
+        let mut lines = Vec::new();
+        let mut line = String::new();
+        for _ in 0..self.batch_size {
+            line.clear();
+            if let Ok(val) = self.reader.read_line(&mut line) {
+                if val == 0 {
+                    self.finished = true;
+                    break;
+                } else {
+                    lines.push(line.clone());
+                }
+            } else {
+                return Some(Err(QueryError::DataSourceError { message: "Failed to read file buffer".to_string() }));
+            }
+        }
+
+        let columns = self.schema.len();
+
+        let mut columnar_data: Vec<Vec<ScalarValue>> = Vec::with_capacity(columns);
+        
+        for _ in 0..columns {
+            columnar_data.push(vec![]);
+        }
+
+        for line in lines.iter() {
+            let line = line.trim().split(",").collect::<Vec<&str>>();
+            for i in 0..columns {
+                if let Some(item) = line.get(i) {
+                    if let Some(field) = self.schema.get(i) {
+
+                        match field.field_type {
+                            DataType::Int32 => {
+                                if !item.is_empty() {
+                                    if let Ok(item) = item.parse::<i32>() {
+                                        columnar_data[i].push(ScalarValue::Int32(Some(item)));
+                                    } else {
+                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the schema".to_string() }))
+                                    }
+                                } else if field.is_nullable {
+                                    columnar_data[i].push(ScalarValue::Int32(None))
+                                } else {
+                                    return Some(Err(QueryError::DataSourceError { message: "Found a value null for a nullable field".to_string() }))
+                                }
+                            },
+                            DataType::Float64 => {
+                                if !item.is_empty() {
+                                    if let Ok(item) = item.parse::<f64>() {
+                                        columnar_data[i].push(ScalarValue::Float64(Some(item)));
+                                    } else {
+                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the schema".to_string() }))
+                                    }
+                                } else if field.is_nullable {
+                                    columnar_data[i].push(ScalarValue::Float64(None))
+                                } else {
+                                    return Some(Err(QueryError::DataSourceError { message: "Found a value null for a nullable field".to_string() }))
+                                }
+                            },
+                            DataType::Bool => {
+                                if !item.is_empty() {
+                                    if let Ok(item) = item.parse::<bool>() {
+                                        columnar_data[i].push(ScalarValue::Bool(Some(item)));
+                                    } else {
+                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the schema".to_string() }))
+                                    }
+                                } else if field.is_nullable {
+                                    columnar_data[i].push(ScalarValue::Bool(None))
+                                } else {
+                                    return Some(Err(QueryError::DataSourceError { message: "Found a value null for a nullable field".to_string() }))
+                                }
+                            },
+                            DataType::String => {
+                                if !item.is_empty() {
+                                    columnar_data[i].push(ScalarValue::String(Some(item.to_string())));
+                                } else if field.is_nullable {
+                                    columnar_data[i].push(ScalarValue::String(None))
+                                } else {
+                                    return Some(Err(QueryError::DataSourceError { message: "Found a value null for a nullable field".to_string() }))
+                                }
+                            }
+                        }
+                    } else {
+                        return Some(Err(QueryError::DataSourceError { message: "Data type not found in schema".to_string() }))
+                    }
+                } else {
+                    return Some(Err(QueryError::DataSourceError { message: "Data type not found in schema".to_string() }))
+                }
+            };
+        };
+
+        let columns = columnar_data.into_iter().map(move |col| {
+            ColumnVector {
+                values: col
+            }
+        })
+        .collect::<Vec<ColumnVector>>();
+        
+        Some(Ok(RecordBatch { schema: Schema { fields: self.schema.clone() }, columns }))
+
     }
 }
 
@@ -47,7 +165,6 @@ impl CsvDataSource {
     pub fn infer_schema(file_path: &ValidCsvPath) -> Result<Vec<Field>, String> {
         if let Ok(file) = File::open(&file_path.0) {
             let mut buf_file = BufReader::new(file);
-            println!("This is the buf_file {:?}", buf_file);
 
             let mut lines = Vec::new();
             let mut line = String::new();
@@ -67,7 +184,6 @@ impl CsvDataSource {
             let first_line = lines.get(0);
             match first_line {
                 Some(line) => {
-                    println!("This is the first line: {:?}", line);
                     if let Some(_second_line) = lines.get(1) {
                         let types = Self::detect_types(&lines, line.trim().split(",").collect::<Vec<&str>>().len());
                         Ok(line.trim().split(",").enumerate().map(move |(i, header)| {
@@ -117,7 +233,6 @@ impl CsvDataSource {
                 }
             };
         };
-        println!("This is the columnar_data: {:?}", columnar_data);
         for (index, data) in columnar_data.iter().enumerate() {
 
             let is_all_empty = data.iter().all(|data| {
@@ -176,6 +291,19 @@ impl DataSource for CsvDataSource {
         &self.original_schema
     }
     fn scan(&self) -> Box<dyn Iterator<Item = Result<RecordBatch, QueryError>>> {
-        todo!();
+        match File::open(&self.file_path.0) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                Box::new(CsvBatchIterator {
+                    batch_size: 16,
+                    finished: false,
+                    reader: reader,
+                    schema: self.original_schema.clone()
+                })
+            },
+            Err(e) => {
+                Box::new(iter::once(Err(QueryError::DataSourceError { message: format!("Failed to open file: {:?}", e) })))
+            }
+        }
     }
 }

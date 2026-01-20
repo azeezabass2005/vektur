@@ -1,16 +1,18 @@
 use crate::{ColumnVector, DataType, errors::QueryError};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Field {
     pub name: String,
     pub field_type: DataType,
     pub is_nullable: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct Schema {
     pub fields: Vec<Field>,
 }
 
+#[derive(Debug)]
 pub struct RecordBatch {
     pub schema: Schema,
     pub columns: Vec<ColumnVector>,
