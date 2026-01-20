@@ -1,15 +1,35 @@
-use std::{ffi::OsStr, fs::{File}, io::{BufRead, BufReader}, path::Path};
+use std::{ffi::{OsString}, fs::File, io::{BufRead, BufReader}, path::{Path, PathBuf}};
 
 use crate::{DataSource, DataType, Field, RecordBatch, errors::QueryError};
 
 #[derive(Debug)]
+pub struct ValidCsvPath(PathBuf);
+
+impl ValidCsvPath {
+    pub fn new(path: &str) -> Result<Self, QueryError> {
+        let path = Path::new(path);
+        if !path.exists() || !path.is_file() {
+            return Err(QueryError::DataSourceError { message: "File doesn't exist".into() });
+        }
+        if path.extension().map(|e| e.to_ascii_lowercase()) != Some(OsString::from("csv")) {
+            return Err(QueryError::DataSourceError { message: "Not a CSV file".into() });
+        }
+        Ok(Self(path.to_path_buf()))
+    }
+}
+
+#[derive(Debug)]
 pub struct CsvDataSource {
-    file_path: String,
+    file_path: ValidCsvPath,
     original_schema: Vec<Field>,
 }
 
 impl CsvDataSource {
     pub fn new(file_path: String) -> Result<Self, QueryError> {
+
+        let file_path = ValidCsvPath::new(&file_path)?;
+
+
         let schema = Self::infer_schema(&file_path);
 
         match schema {
@@ -24,24 +44,8 @@ impl CsvDataSource {
             }
         }
     }
-    pub fn infer_schema(file_path: &str) -> Result<Vec<Field>, String> {
-        
-        let path = Path::new(file_path);
-        if !path.exists() || !path.is_file() {
-            return Err("File doesn't exist".to_string());
-        }
-        match path.extension() {
-            Some(ext) => {
-                if ext.to_ascii_lowercase() != OsStr::new("csv") {
-                    return Err("Please the file should be a csv file".to_string());
-                };
-            },
-            None => {
-                return Err("The path does not have an extension".to_string())
-            }
-        };
-
-        if let Ok(file) = File::open(path) {
+    pub fn infer_schema(file_path: &ValidCsvPath) -> Result<Vec<Field>, String> {
+        if let Ok(file) = File::open(&file_path.0) {
             let mut buf_file = BufReader::new(file);
             println!("This is the buf_file {:?}", buf_file);
 
