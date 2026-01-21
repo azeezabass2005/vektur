@@ -16,5 +16,8 @@ pub enum QueryError {
     },
     DataSourceError {
         message: String,
+    },
+    ValidationError {
+        message: String,
     }
 }

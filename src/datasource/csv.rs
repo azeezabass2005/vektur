@@ -22,7 +22,7 @@ impl ValidCsvPath {
 
 struct CsvBatchIterator {
     reader: BufReader<File>,
-    schema: Vec<Field>,
+    schema: Schema,
     batch_size: usize,
     finished: bool,
 }
@@ -51,7 +51,7 @@ impl Iterator for CsvBatchIterator {
             }
         }
 
-        let columns = self.schema.len();
+        let columns = self.schema.fields.len();
 
         let mut columnar_data: Vec<Vec<ScalarValue>> = Vec::with_capacity(columns);
         
@@ -63,7 +63,7 @@ impl Iterator for CsvBatchIterator {
             let line = line.trim().split(",").collect::<Vec<&str>>();
             for i in 0..columns {
                 if let Some(item) = line.get(i) {
-                    if let Some(field) = self.schema.get(i) {
+                    if let Some(field) = self.schema.fields.get(i) {
 
                         match field.field_type {
                             DataType::Int32 => {
@@ -131,7 +131,7 @@ impl Iterator for CsvBatchIterator {
         })
         .collect::<Vec<ColumnVector>>();
 
-        let schema = Schema::new(self.schema.clone());
+        let schema = self.schema.clone();
         Some(RecordBatch::new(schema, columns))
         
     }
@@ -140,7 +140,7 @@ impl Iterator for CsvBatchIterator {
 #[derive(Debug)]
 pub struct CsvDataSource {
     file_path: ValidCsvPath,
-    original_schema: Vec<Field>,
+    original_schema: Schema,
 }
 
 impl CsvDataSource {
@@ -152,9 +152,9 @@ impl CsvDataSource {
         let schema = Self::infer_schema(&file_path);
 
         match schema {
-            Ok(schema) => {
+            Ok(fields) => {
                 Ok(Self {
-                    original_schema: schema,
+                    original_schema: Schema::new(fields),
                     file_path
                 })
             },
@@ -288,7 +288,7 @@ impl CsvDataSource {
 }
 
 impl DataSource for CsvDataSource {
-    fn schema(&self) -> &Vec<Field> {
+    fn schema(&self) -> &Schema {
         &self.original_schema
     }
     fn scan(&self) -> Box<dyn Iterator<Item = Result<RecordBatch, QueryError>>> {
