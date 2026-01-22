@@ -25,6 +25,7 @@ struct CsvBatchIterator {
     schema: Schema,
     batch_size: usize,
     finished: bool,
+    header_skipped: bool,
 }
 
 impl Iterator for CsvBatchIterator {
@@ -33,6 +34,21 @@ impl Iterator for CsvBatchIterator {
     fn next(&mut self) -> Option<Self::Item> {        
         if self.finished {
             return None;
+        }
+
+        if !self.header_skipped {
+            let mut header_line = String::new();
+            if let Ok(val) = self.reader.read_line(&mut header_line) {
+                if val == 0 {
+                    self.finished = true;
+                    return None;
+                }
+            } else {
+                return Some(Err(QueryError::DataSourceError { 
+                    message: "Failed to read header".to_string() 
+                }));
+            }
+            self.header_skipped = true;
         }
 
         let mut lines = Vec::new();
@@ -71,7 +87,7 @@ impl Iterator for CsvBatchIterator {
                                     if let Ok(item) = item.parse::<i32>() {
                                         columnar_data[i].push(ScalarValue::Int32(Some(item)));
                                     } else {
-                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the schema".to_string() }))
+                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the column type: Int32".to_string() }))
                                     }
                                 } else if field.is_nullable {
                                     columnar_data[i].push(ScalarValue::Int32(None))
@@ -84,7 +100,7 @@ impl Iterator for CsvBatchIterator {
                                     if let Ok(item) = item.parse::<f64>() {
                                         columnar_data[i].push(ScalarValue::Float64(Some(item)));
                                     } else {
-                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the schema".to_string() }))
+                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the column type: Float64".to_string() }))
                                     }
                                 } else if field.is_nullable {
                                     columnar_data[i].push(ScalarValue::Float64(None))
@@ -97,7 +113,7 @@ impl Iterator for CsvBatchIterator {
                                     if let Ok(item) = item.parse::<bool>() {
                                         columnar_data[i].push(ScalarValue::Bool(Some(item)));
                                     } else {
-                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the schema".to_string() }))
+                                        return Some(Err(QueryError::DataSourceError { message: "Item does not match the column type: bool".to_string() }))
                                     }
                                 } else if field.is_nullable {
                                     columnar_data[i].push(ScalarValue::Bool(None))
@@ -299,7 +315,8 @@ impl DataSource for CsvDataSource {
                     batch_size: 16,
                     finished: false,
                     reader: reader,
-                    schema: self.original_schema.clone()
+                    schema: self.original_schema.clone(),
+                    header_skipped: false,
                 })
             },
             Err(e) => {

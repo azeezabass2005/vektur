@@ -24,6 +24,13 @@ impl Schema {
             fields
         }
     }
+    pub fn column_exists(&self, column_name: &str) -> Result<&Field, String> {
+        if let Some(field) = self.fields.iter().find(|f| f.name == column_name) {
+            Ok(field)
+        } else {
+            Err(format!("column {} does not exist in the schema", column_name))
+        }
+    }
 }
 
 impl RecordBatch {
