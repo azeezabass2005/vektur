@@ -109,17 +109,13 @@ impl PlanBuilder {
         let input = self.current_plan.ok_or_else(|| {
             QueryError::ValidationError { message: "Filter did not receive current plan".to_string() }
         })?;
-
         expression.is_valid().map_err(|err| {
             return QueryError::ValidationError { message: err };
         })?;
-        
         if !matches!(expression, Expression::Binary { .. } | Expression::Unary { .. }) {
             return Err(QueryError::ValidationError { message: "Expression Type not supported for filtering".to_string() })
         }
-
         let plan = LogicalPlan::Filter { input: Box::new(input), predicate: expression  };
-
         Ok(PlanBuilder{
             current_plan: Some(plan),
             ..self
@@ -127,22 +123,17 @@ impl PlanBuilder {
     }
 
     pub fn project(self, columns: Vec<String>) -> Result<PlanBuilder, QueryError> {
-        
         let input = self.current_plan.ok_or_else(|| {
             QueryError::ValidationError { message: "Filter did not receive current plan".to_string() }
         })?;
-
         let mut columns_expr = Vec::with_capacity(columns.len());
-
         for column in columns {
             let field = self.current_schema.column_exists(&column).map_err(|err| {
                 return QueryError::ValidationError { message: err }
             })?;
             columns_expr.push(Expression::Column { name: field.name.clone(), data_type: field.field_type });
         }
-
         let plan = LogicalPlan::Projection { input: Box::new(input), columns: columns_expr };
-
         Ok(PlanBuilder{
             current_plan: Some(plan),
             ..self
