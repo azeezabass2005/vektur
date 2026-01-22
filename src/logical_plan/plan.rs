@@ -62,7 +62,19 @@ pub enum Expression {
 
 impl Expression {
     fn is_valid(&self) -> Result<(), String> {
-        todo!();
+        match self {
+            Expression::Column { name, data_type } => {
+                // I will implement a schema check for the column entered
+                todo!()
+            },
+            Expression::Binary { left, right, operator } => {
+                todo!()
+            },
+            Expression::Unary { operand, operator } => {
+                todo!()
+            },
+            _ => Ok(())
+        }
     }
 }
 
@@ -140,7 +152,10 @@ impl PlanBuilder {
         })
     }
 
-    pub fn build(self) -> Result<(), QueryError> {
-        todo!();
+    pub fn build(self) -> Result<LogicalPlan, QueryError> {
+        let current_plan = self.current_plan.ok_or_else(|| {
+            return QueryError::DataSourceError { message: format!("Failed to build logical plan") }
+        })?;
+        Ok(current_plan)
     }
 }
