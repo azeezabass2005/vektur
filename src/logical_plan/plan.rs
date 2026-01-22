@@ -105,27 +105,24 @@ impl PlanBuilder {
     }
 
     pub fn filter(self, expression: Expression) -> Result<PlanBuilder, QueryError> {
-        if let Some(input) = self.current_plan {
-            match expression {
-                Expression::Binary { .. } | Expression::Unary { .. } => {
-                    match expression.is_valid() {
-                        Ok(_) => {
-                            let plan = LogicalPlan::Filter { input: Box::new(input), predicate: expression  };
-                            Ok(PlanBuilder{
-                                current_plan: Some(plan),
-                                ..self
-                            })
-                        },
-                        Err(err) => {
-                            Err(QueryError::ValidationError { message: err })
-                        }
-                    }
-                },
-                _ => Err(QueryError::ValidationError { message: "Expression Type not supported for filtering".to_string() })
-            }
 
-        } else {
-            Err(QueryError::ValidationError { message: "Filter did not receive current plan".to_string() })
-        }     
+        let input = self.current_plan.ok_or_else(|| {
+            QueryError::ValidationError { message: "Filter did not receive current plan".to_string() }
+        })?;
+
+        expression.is_valid().map_err(|err| {
+            return QueryError::ValidationError { message: err };
+        })?;
+        
+        if !matches!(expression, Expression::Binary { .. } | Expression::Unary { .. }) {
+            return Err(QueryError::ValidationError { message: "Expression Type not supported for filtering".to_string() })
+        }
+
+        let plan = LogicalPlan::Filter { input: Box::new(input), predicate: expression  };
+
+        Ok(PlanBuilder{
+            current_plan: Some(plan),
+            ..self
+        })
     }
 }
