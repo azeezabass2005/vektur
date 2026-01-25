@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::Binary};
+use std::{collections::HashMap, fmt::{Display, Formatter}};
 
-use crate::{DataSource, DataType, ScalarValue, Schema, errors::QueryError};
+use crate::{DataSource, DataType, Field, ScalarValue, Schema, errors::QueryError};
 
 
 #[derive(Debug)]
@@ -20,7 +20,39 @@ pub enum LogicalPlan {
     }
 }
 
-#[derive(Debug)]
+impl Display for LogicalPlan {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+impl LogicalPlan {
+    fn fmt_with_indent(&self, f: &mut Formatter<'_>, indent: usize) -> std::fmt::Result {
+        let indent_str = "  ".repeat(indent);
+        match self {
+            LogicalPlan::Scan { path, projection, .. } => {
+                write!(f, "{}Scan: {} (columns: {:?})", indent_str, path, projection)
+            },
+            LogicalPlan::Filter { input, predicate } => {
+                write!(f, "{}Filter: {:?}\n", indent_str, predicate)?;
+                input.fmt_with_indent(f, indent + 1)
+            },
+            LogicalPlan::Projection { input, columns } => {
+                let col_names: Vec<String> = columns.iter().map(|c| {
+                    if let Expression::Column { name, .. } = c {
+                        name.clone()
+                    } else {
+                        format!("{:?}", c)
+                    }
+                }).collect();
+                write!(f, "{}Projection: {:?}\n", indent_str, col_names)?;
+                input.fmt_with_indent(f, indent + 1)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Operator {
     Gt,
     Lt,
@@ -32,7 +64,7 @@ pub enum Operator {
     Divide,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOperator {
     Not,
     IsNull,
@@ -41,8 +73,7 @@ pub enum UnaryOperator {
 }
 
 
-/// This is the enum for expressions
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Column {
         name: String,
@@ -61,17 +92,136 @@ pub enum Expression {
 }
 
 impl Expression {
-    fn is_valid(&self) -> Result<(), String> {
+
+    fn get_data_type(&self, schema: &Schema) -> Result<DataType, String> {
         match self {
-            Expression::Column { name, data_type } => {
-                // I will implement a schema check for the column entered
-                todo!()
+            Expression::Column { data_type, .. } => Ok(*data_type),
+            Expression::Literal(scalar) => {
+                match scalar {
+                    ScalarValue::Int32(_) => Ok(DataType::Int32),
+                    ScalarValue::String(_) => Ok(DataType::String),
+                    ScalarValue::Bool(_) => Ok(DataType::Bool),
+                    ScalarValue::Float64(_) => Ok(DataType::Float64),
+                }
             },
             Expression::Binary { left, right, operator } => {
-                todo!()
+                let left_type = left.get_data_type(schema)?;
+                let right_type = right.get_data_type(schema)?;
+                
+                match operator {
+                    Operator::Gt | Operator::Lt | Operator::Eq | Operator::NotEq => {
+                        if Self::are_compatible_for_comparison(&left_type, &right_type) {
+                            Ok(DataType::Bool)
+                        } else {
+                            Err(format!(
+                                "Incompatible types for comparison: {:?} and {:?}",
+                                left_type, right_type
+                            ))
+                        }
+                    },
+                    Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide => {
+                        if Self::are_compatible_for_arithmetic(&left_type, &right_type) {
+                            if left_type == DataType::Float64 || right_type == DataType::Float64 {
+                                Ok(DataType::Float64)
+                            } else {
+                                Ok(DataType::Int32)
+                            }
+                        } else {
+                            Err(format!(
+                                "Incompatible types for arithmetic: {:?} and {:?}",
+                                left_type, right_type
+                            ))
+                        }
+                    },
+                }
             },
             Expression::Unary { operand, operator } => {
-                todo!()
+                let operand_type = operand.get_data_type(schema)?;
+                match operator {
+                    UnaryOperator::Not => {
+                        if operand_type == DataType::Bool {
+                            Ok(DataType::Bool)
+                        } else {
+                            Err(format!("Not operator requires Bool, got {:?}", operand_type))
+                        }
+                    },
+                    UnaryOperator::IsNull | UnaryOperator::IsNotNull => Ok(DataType::Bool),
+                    UnaryOperator::Negate => {
+                        match operand_type {
+                            DataType::Int32 | DataType::Float64 => Ok(operand_type),
+                            _ => Err(format!("Negate operator requires numeric type, got {:?}", operand_type))
+                        }
+                    },
+                }
+            },
+        }
+    }
+
+
+    fn are_compatible_for_comparison(left: &DataType, right: &DataType) -> bool {
+        match (left, right) {
+            (DataType::Int32, DataType::Int32) => true,
+            (DataType::Float64, DataType::Float64) => true,
+            (DataType::Int32, DataType::Float64) => true,
+            (DataType::Float64, DataType::Int32) => true,
+            (DataType::String, DataType::String) => true,
+            (DataType::Bool, DataType::Bool) => true,
+            _ => false,
+        }
+    }
+
+    fn are_compatible_for_arithmetic(left: &DataType, right: &DataType) -> bool {
+        match (left, right) {
+            (DataType::Int32, DataType::Int32) => true,
+            (DataType::Float64, DataType::Float64) => true,
+            (DataType::Int32, DataType::Float64) => true,
+            (DataType::Float64, DataType::Int32) => true,
+            _ => false,
+        }
+    }
+
+    fn is_valid(&self, schema: &Schema) -> Result<(), String> {
+        match self {
+            Expression::Column { name, data_type } => {
+                let field = schema.column_exists(name)?;
+                if field.field_type != *data_type {
+                    return Err(format!(
+                        "Column {} type mismatch: expected {:?} got {:?}",
+                        name, field.field_type, data_type
+                    ))
+                };
+                Ok(())
+            },
+            Expression::Binary { left, right, operator } => {
+                left.is_valid(&schema)?;
+                right.is_valid(&schema)?;                
+                let left_type = left.get_data_type(schema)?;
+                let right_type = right.get_data_type(schema)?;
+                
+                match operator {
+                    Operator::Gt | Operator::Lt | Operator::Eq | Operator::NotEq => {
+                        if !Self::are_compatible_for_comparison(&left_type, &right_type) {
+                            return Err(format!(
+                                "Incompatible types for {} operator: {:?} and {:?}",
+                                format!("{:?}", operator), left_type, right_type
+                            ));
+                        }
+                    },
+                    Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide => {
+                        if !Self::are_compatible_for_arithmetic(&left_type, &right_type) {
+                            return Err(format!(
+                                "Incompatible types for {} operator: {:?} and {:?}",
+                                format!("{:?}", operator), left_type, right_type
+                            ));
+                        }
+                    },
+                }
+                
+                Ok(())
+            },
+            Expression::Unary { operand, operator } => {
+                operand.is_valid(schema)?;
+                Ok(())
             },
             _ => Ok(())
         }
@@ -83,6 +233,16 @@ pub struct Catalog {
 }
 
 impl Catalog {
+    pub fn new() -> Self {
+        Self {
+            tables: HashMap::new()
+        }
+    }
+
+    pub fn register_table(&mut self, name: String,source: Box<dyn DataSource>, ) {
+        self.tables.insert(name, source);
+    }
+
     pub fn get_schema(&self, table_name: &str) -> Option<&Schema> {
         let table = self.tables.get(table_name);
         match table {
@@ -94,14 +254,22 @@ impl Catalog {
     }
 }
 
-pub struct PlanBuilder {
-    catalog: Catalog,
+pub struct PlanBuilder<'a> {
+    catalog: &'a Catalog,
     current_plan: Option<LogicalPlan>,
     current_schema: Schema,
 }
 
-impl PlanBuilder {
-    pub fn scan(self, table_name: &str) -> Result<PlanBuilder, QueryError> {
+impl<'a> PlanBuilder<'a> {
+    pub fn new(catalog: &'a Catalog) -> Self {
+        Self {
+            catalog: catalog,
+            current_plan: None,
+            current_schema: Schema::new(Vec::new())
+        }
+    }
+
+    pub fn scan(self, table_name: &str) -> Result<PlanBuilder<'a>, QueryError> {
         let source = self.catalog.tables.get(table_name);
         match source {
             Some(source) => {
@@ -116,12 +284,12 @@ impl PlanBuilder {
         }
     }
 
-    pub fn filter(self, expression: Expression) -> Result<PlanBuilder, QueryError> {
+    pub fn filter(self, expression: Expression) -> Result<PlanBuilder<'a>, QueryError> {
 
         let input = self.current_plan.ok_or_else(|| {
             QueryError::ValidationError { message: "Filter did not receive current plan".to_string() }
         })?;
-        expression.is_valid().map_err(|err| {
+        expression.is_valid(&self.current_schema).map_err(|err| {
             return QueryError::ValidationError { message: err };
         })?;
         if !matches!(expression, Expression::Binary { .. } | Expression::Unary { .. }) {
@@ -134,9 +302,9 @@ impl PlanBuilder {
         })
     }
 
-    pub fn project(self, columns: Vec<String>) -> Result<PlanBuilder, QueryError> {
+    pub fn project(self, columns: Vec<String>) -> Result<PlanBuilder<'a>, QueryError> {
         let input = self.current_plan.ok_or_else(|| {
-            QueryError::ValidationError { message: "Filter did not receive current plan".to_string() }
+            QueryError::ValidationError { message: "Projection did not receive current plan".to_string() }
         })?;
         let mut columns_expr = Vec::with_capacity(columns.len());
         for column in columns {
@@ -145,9 +313,24 @@ impl PlanBuilder {
             })?;
             columns_expr.push(Expression::Column { name: field.name.clone(), data_type: field.field_type });
         }
-        let plan = LogicalPlan::Projection { input: Box::new(input), columns: columns_expr };
+        let plan = LogicalPlan::Projection { input: Box::new(input), columns: columns_expr.clone() };
+        let new_schema_fields: Vec<Field> = columns_expr.iter().map(|expr| {
+            if let Expression::Column { name, data_type } = expr {
+                Field {
+                    name: name.clone(),
+                    field_type: *data_type,
+                    is_nullable: true,
+                }
+            } else {
+                todo!("Non-column expressions in projection")
+            }
+        }).collect();
+        
+        let new_schema = Schema::new(new_schema_fields);
+
         Ok(PlanBuilder{
             current_plan: Some(plan),
+            current_schema: new_schema,
             ..self
         })
     }

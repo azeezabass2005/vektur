@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScalarValue {
     Int32(Option<i32>),
     String(Option<String>),
