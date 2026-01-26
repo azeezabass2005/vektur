@@ -72,7 +72,7 @@ pub enum UnaryOperator {
     Negate,
 }
 
-
+ 
 #[derive(Debug, Clone)]
 pub enum Expression {
     Column {
@@ -306,13 +306,13 @@ impl<'a> PlanBuilder<'a> {
         let input = self.current_plan.ok_or_else(|| {
             QueryError::ValidationError { message: "Projection did not receive current plan".to_string() }
         })?;
-        let mut columns_expr = Vec::with_capacity(columns.len());
-        for column in columns {
-            let field = self.current_schema.column_exists(&column).map_err(|err| {
-                return QueryError::ValidationError { message: err }
-            })?;
-            columns_expr.push(Expression::Column { name: field.name.clone(), data_type: field.field_type });
-        }
+        
+        let columns_expr = columns.into_iter().map(|col| {
+            let field = self.current_schema.column_exists(&col).map_err(|err| 
+                QueryError::ValidationError { message: err })?;
+            Ok(Expression::Column { name: field.name.clone(), data_type: field.field_type })
+        }).collect::<Result<Vec<Expression>, QueryError>>()?;
+
         let plan = LogicalPlan::Projection { input: Box::new(input), columns: columns_expr.clone() };
         let new_schema_fields: Vec<Field> = columns_expr.iter().map(|expr| {
             if let Expression::Column { name, data_type } = expr {

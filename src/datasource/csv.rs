@@ -164,7 +164,6 @@ impl CsvDataSource {
 
         let file_path = ValidCsvPath::new(&file_path)?;
 
-
         let schema = Self::infer_schema(&file_path);
 
         match schema {
