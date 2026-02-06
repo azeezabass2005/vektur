@@ -335,6 +335,10 @@ impl DataFrame {
                 Schema::new(new_fields)
             }
         }
+    }                // Build new schema from projection expressions
+
+    pub fn plan(&self) -> LogicalPlan {
+        self.plan.clone()
     }
 }
 
