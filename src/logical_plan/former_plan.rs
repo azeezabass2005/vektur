@@ -1,14 +1,14 @@
 use std::{collections::HashMap, fmt::{Display, Formatter}};
 
-use crate::{DataSource, DataType, Field, ScalarValue, Schema, datasource::csv::{CsvDataSource, ValidCsvPath}, errors::QueryError, logical_plan};
+use crate::{DataSource, DataType, Field, ScalarValue, Schema, errors::QueryError};
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum LogicalPlan {
     Scan {
         path: String,
         schema: Schema,
-        projection: Option<Vec<String>>
+        projection: Vec<String>
     },
     Filter {
         input: Box<LogicalPlan>,
@@ -19,7 +19,6 @@ pub enum LogicalPlan {
         columns: Vec<Expression>
     }
 }
-
 
 impl Display for LogicalPlan {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -255,87 +254,12 @@ impl Catalog {
     }
 }
 
-
-pub struct ExecutionContext {
-    catalog: Catalog
-}
-
-impl ExecutionContext {
-    pub fn new() -> Self {
-        Self {
-            catalog: Catalog {
-                tables: HashMap::new()
-            }
-        }
-    }
-
-    pub fn csv(&self, file_path: String) -> Result<DataFrame, QueryError> {
-
-        let data_source = CsvDataSource::new(file_path.clone())?;
- 
-
-        let schema = data_source.schema();
-
-        let plan = LogicalPlan::Scan {
-            path: file_path, schema: schema.clone(), projection: None,
-        };
-        Ok(DataFrame { plan })
-    }
-}
-
 pub struct DataFrame {
     plan: LogicalPlan
 }
 
 impl DataFrame {
-    pub fn project(self, columns: Vec<Expression>) -> Self {
-        Self {
-            plan: LogicalPlan::Projection { input: Box::new(self.plan), columns: columns }
-        }
-    }
-
-    pub fn filter(self, predicate: Expression) -> Self {
-        Self {
-            plan: LogicalPlan::Filter { input: Box::new(self.plan), predicate }
-        }
-    }
-
-    pub fn schema(&self) -> Schema {
-        match &self.plan {
-            LogicalPlan::Scan { schema, .. } => {
-                schema.clone()
-            },
-            LogicalPlan::Filter { input, .. } => {
-                DataFrame { plan: *input.clone() }.schema()
-            },
-            LogicalPlan::Projection { input, columns } => {
-                let input_schema = DataFrame { plan: *input.clone() }.schema();
-                
-                let new_fields: Vec<Field> = columns.iter().map(|expr| {
-                    let data_type = expr.get_data_type(&input_schema).unwrap();
-
-                    match expr {
-                        Expression::Column { name, .. } => {
-                            Field {
-                                name: name.clone(),
-                                field_type: data_type,
-                                is_nullable: true,
-                            }
-                        },
-                        _ => {
-                            Field {
-                                name: format!("{:?}", expr),
-                                field_type: data_type,
-                                is_nullable: true,
-                            }
-                        }
-                    }
-                }).collect();
-                
-                Schema::new(new_fields)
-            }
-        }
-    }
+    
 }
 
 pub struct PlanBuilder<'a> {
@@ -361,7 +285,7 @@ impl<'a> PlanBuilder<'a> {
                 let projection = schema.fields.iter().map(|f| {
                     f.name.clone()
                 }).collect::<Vec<String>>();
-                let current_plan = LogicalPlan::Scan { path: table_name.to_string() , schema: schema.clone(), projection: Some(projection) };
+                let current_plan = LogicalPlan::Scan { path: table_name.to_string() , schema: schema.clone(), projection: projection };
                 Ok(PlanBuilder {  current_schema: schema.clone(), current_plan: Some(current_plan), ..self  })
             },
             None => Err(QueryError::ValidationError { message: "Table not found".to_string() })
