@@ -21,3 +21,9 @@ pub enum QueryError {
         message: String,
     }
 }
+
+pub enum LexerError {
+    InvalidToken {
+        message: String,
+    }
+}
