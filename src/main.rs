@@ -7,7 +7,6 @@ fn main() {
 
     let sql_query = "SELECT Name, Email FROM students WHERE IsVerified = true";
     
-    // First, set up the catalog
     let mut catalog = Catalog::new();
     match CsvDataSource::new(csv_path.to_string()) {
         Ok(csv_source) => {
@@ -20,7 +19,6 @@ fn main() {
         }
     }
     
-    // Parse SQL and convert to LogicalPlan
     println!("=== SQL to Logical Plan Conversion ===\n");
     println!("SQL Query: {}\n", sql_query);
     
