@@ -1,12 +1,13 @@
 use vektur::{
-    DataType, ScalarValue, datasource::csv::CsvDataSource, logical_plan::plan::{Catalog, Expression, Operator, PlanBuilder}
+    DataType, ScalarValue, datasource::csv::CsvDataSource, errors::LexerError, logical_plan::plan::{Catalog, Expression, Operator, PlanBuilder}, sql_support::sql::{parse_sql, sql_to_logical_plan}
 };
 
 fn main() {
     let csv_path = "test/students.csv";
+
+    let sql_query = "SELECT Name, Email FROM students WHERE IsVerified = true";
     
-    println!("=== Testing Logical Plan Builder ===\n");
-    
+    // First, set up the catalog
     let mut catalog = Catalog::new();
     match CsvDataSource::new(csv_path.to_string()) {
         Ok(csv_source) => {
@@ -18,6 +19,32 @@ fn main() {
             return;
         }
     }
+    
+    // Parse SQL and convert to LogicalPlan
+    println!("=== SQL to Logical Plan Conversion ===\n");
+    println!("SQL Query: {}\n", sql_query);
+    
+    match parse_sql(sql_query) {
+        Ok(statements) => {
+            if let Some(statement) = statements.first() {
+                match sql_to_logical_plan(statement, &catalog) {
+                    Ok(plan) => {
+                        println!("Generated Logical Plan:\n{}\n", plan);
+                    },
+                    Err(e) => {
+                        println!("Error converting to logical plan: {:?}\n", e);
+                    }
+                }
+            }
+        },
+        Err(e) => {
+            match e {
+                LexerError::InvalidToken { message } => println!("Parse error: {}", message),
+            }
+        }
+    }
+    
+    println!("=== Testing Logical Plan Builder ===\n");
     
     println!("--- Test 1: Simple Scan ---");
     let builder = PlanBuilder::new(&catalog);
