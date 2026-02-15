@@ -2,23 +2,15 @@ use sqlparser::ast::{Statement, SetExpr, SelectItem, Expr, BinaryOperator as Sql
 use crate::logical_plan::plan::{LogicalPlan, Expression, Operator, Catalog};
 use crate::{ScalarValue, Schema, errors::QueryError};
 
-/// Extension trait to convert SQL AST types to our Expression type
-/// This is an "extension trait" - we can implement it for external types
-/// (like sqlparser's SelectItem) even though we don't own them.
 trait ToExpression {
     fn to_expression(&self, schema: &Schema) -> Result<Expression, QueryError>;
 }
 
-/// Implement the trait for SelectItem (external type from sqlparser)
 impl ToExpression for SelectItem {
     fn to_expression(&self, schema: &Schema) -> Result<Expression, QueryError> {
         match self {
-            SelectItem::UnnamedExpr(expr) => {
-                expr.to_expression(schema)  // Now using trait method!
-            }
-            SelectItem::ExprWithAlias { expr, .. } => {
-                expr.to_expression(schema)  // Now using trait method!
-            }
+            SelectItem::UnnamedExpr(expr) => expr.to_expression(schema),
+            SelectItem::ExprWithAlias { expr, .. } => expr.to_expression(schema),
             SelectItem::Wildcard(_) => {
                 Err(QueryError::ValidationError {
                     message: "SELECT * is not yet supported in projection".to_string(),
@@ -31,7 +23,6 @@ impl ToExpression for SelectItem {
     }
 }
 
-/// Implement the trait for Expr (external type from sqlparser)
 impl ToExpression for Expr {
     fn to_expression(&self, schema: &Schema) -> Result<Expression, QueryError> {
         match self {
@@ -49,8 +40,8 @@ impl ToExpression for Expr {
                 Ok(Expression::Literal(scalar))
             }
             Expr::BinaryOp { left, op, right } => {
-                let left_expr = left.to_expression(schema)?;  // Recursive trait call!
-                let right_expr = right.to_expression(schema)?; // Recursive trait call!
+                let left_expr = left.to_expression(schema)?;
+                let right_expr = right.to_expression(schema)?;
                 let operator = sql_binary_op_to_operator(op)?;
                 Ok(Expression::Binary {
                     left: Box::new(left_expr),
@@ -59,7 +50,7 @@ impl ToExpression for Expr {
                 })
             }
             Expr::UnaryOp { op, expr } => {
-                let operand = expr.to_expression(schema)?;  // Recursive trait call!
+                let operand = expr.to_expression(schema)?;
                 let operator = sql_unary_op_to_operator(op)?;
                 Ok(Expression::Unary {
                     operand: Box::new(operand),
@@ -73,15 +64,12 @@ impl ToExpression for Expr {
     }
 }
 
-/// Convert a sqlparser AST Statement into a LogicalPlan
 pub fn sql_to_logical_plan(
     statement: &Statement,
     catalog: &Catalog,
 ) -> Result<LogicalPlan, QueryError> {
     match statement {
-        Statement::Query(query) => {
-            query_to_logical_plan(query, catalog)
-        },
+        Statement::Query(query) => query_to_logical_plan(query, catalog),
         _ => Err(QueryError::ValidationError {
             message: format!("Unsupported statement type: {:?}", statement),
         }),
@@ -114,7 +102,7 @@ fn query_to_logical_plan(
     };
 
     if let Some(selection) = &select.selection {
-        let predicate = selection.to_expression(&schema)?;  // Now using trait method!
+        let predicate = selection.to_expression(&schema)?;
         plan = LogicalPlan::Filter {
             input: Box::new(plan),
             predicate,
@@ -123,21 +111,20 @@ fn query_to_logical_plan(
 
     let mut projection_columns: Vec<Expression> = Vec::new();
     for item in &select.projection {
-        match item  {
+        match item {
             SelectItem::Wildcard(_) => {
                 for field in &schema.fields {
                     projection_columns.push(Expression::Column {
                         name: field.name.clone(),
-                        data_type: field.field_type
+                        data_type: field.field_type,
                     })
                 }
-            },
+            }
             _ => {
                 projection_columns.push(item.to_expression(&schema)?);
             }
         }
     }
-
 
     if !projection_columns.is_empty() {
         plan = LogicalPlan::Projection {
@@ -149,7 +136,6 @@ fn query_to_logical_plan(
     Ok(plan)
 }
 
-/// Extract table name from FROM clause
 fn extract_table_name(select: &sqlparser::ast::Select) -> Result<String, QueryError> {
     if select.from.is_empty() {
         return Err(QueryError::ValidationError {
@@ -175,20 +161,6 @@ fn extract_table_name(select: &sqlparser::ast::Select) -> Result<String, QueryEr
     }
 }
 
-// NOTE: Both `SelectItem` and `Expr` now implement the `ToExpression` trait.
-// This provides a consistent API: `item.to_expression(&schema)` and `expr.to_expression(&schema)`
-// 
-// Why use an extension trait instead of implementing directly on external types?
-// - SelectItem and Expr are from the external `sqlparser` crate
-// - Rust's orphan rule prevents implementing traits on external types
-// - Extension traits solve this by defining the trait in our crate
-// 
-// Benefits of extending the trait to multiple types:
-// - Consistent API across all SQL AST conversions
-// - Easier to discover: all types that convert to Expression have the same method
-// - Can be used in generic code: `fn convert<T: ToExpression>(item: &T, schema: &Schema)`
-
-/// Convert sqlparser BinaryOperator to your Operator enum
 fn sql_binary_op_to_operator(op: &SqlBinaryOp) -> Result<Operator, QueryError> {
     match op {
         SqlBinaryOp::Eq => Ok(Operator::Eq),
@@ -207,7 +179,6 @@ fn sql_binary_op_to_operator(op: &SqlBinaryOp) -> Result<Operator, QueryError> {
     }
 }
 
-/// Convert sqlparser UnaryOperator to your UnaryOperator enum
 fn sql_unary_op_to_operator(
     op: &sqlparser::ast::UnaryOperator,
 ) -> Result<crate::logical_plan::plan::UnaryOperator, QueryError> {
@@ -221,7 +192,6 @@ fn sql_unary_op_to_operator(
     }
 }
 
-/// Convert sqlparser Value to your ScalarValue
 fn sql_value_to_scalar(value: &Value) -> Result<ScalarValue, QueryError> {
     match value {
         Value::Number(n, _) => {
