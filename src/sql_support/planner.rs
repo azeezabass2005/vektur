@@ -32,8 +32,6 @@ impl ToExpression for SelectItem {
 }
 
 /// Implement the trait for Expr (external type from sqlparser)
-/// This allows us to use `expr.to_expression(&schema)` instead of 
-/// `sql_expr_to_expression(expr, &schema)` everywhere
 impl ToExpression for Expr {
     fn to_expression(&self, schema: &Schema) -> Result<Expression, QueryError> {
         match self {
@@ -123,12 +121,23 @@ fn query_to_logical_plan(
         };
     }
 
-    // Using the trait-based approach - cleaner method call syntax!
-    let projection_columns: Vec<Expression> = select
-        .projection
-        .iter()
-        .map(|item| item.to_expression(&schema))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut projection_columns: Vec<Expression> = Vec::new();
+    for item in &select.projection {
+        match item  {
+            SelectItem::Wildcard(_) => {
+                for field in &schema.fields {
+                    projection_columns.push(Expression::Column {
+                        name: field.name.clone(),
+                        data_type: field.field_type
+                    })
+                }
+            },
+            _ => {
+                projection_columns.push(item.to_expression(&schema)?);
+            }
+        }
+    }
+
 
     if !projection_columns.is_empty() {
         plan = LogicalPlan::Projection {
@@ -186,8 +195,8 @@ fn sql_binary_op_to_operator(op: &SqlBinaryOp) -> Result<Operator, QueryError> {
         SqlBinaryOp::NotEq => Ok(Operator::NotEq),
         SqlBinaryOp::Gt => Ok(Operator::Gt),
         SqlBinaryOp::Lt => Ok(Operator::Lt),
-        SqlBinaryOp::GtEq => Ok(Operator::Gt), // TODO: I will add greater than or equal to operator
-        SqlBinaryOp::LtEq => Ok(Operator::Lt), // TODO: Same for less than or equal to
+        SqlBinaryOp::GtEq => Ok(Operator::GtEq),
+        SqlBinaryOp::LtEq => Ok(Operator::LtEq),
         SqlBinaryOp::Plus => Ok(Operator::Add),
         SqlBinaryOp::Minus => Ok(Operator::Subtract),
         SqlBinaryOp::Multiply => Ok(Operator::Multiply),

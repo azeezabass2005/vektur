@@ -57,6 +57,8 @@ impl LogicalPlan {
 pub enum Operator {
     Gt,
     Lt,
+    GtEq,
+    LtEq,
     Eq,
     NotEq,
     Add,
@@ -110,7 +112,7 @@ impl Expression {
                 let right_type = right.get_data_type(schema)?;
                 
                 match operator {
-                    Operator::Gt | Operator::Lt | Operator::Eq | Operator::NotEq => {
+                    Operator::Gt | Operator::Lt | Operator::Eq | Operator::NotEq | Operator::GtEq | Operator::LtEq => {
                         if Self::are_compatible_for_comparison(&left_type, &right_type) {
                             Ok(DataType::Bool)
                         } else {
@@ -200,7 +202,7 @@ impl Expression {
                 let right_type = right.get_data_type(schema)?;
                 
                 match operator {
-                    Operator::Gt | Operator::Lt | Operator::Eq | Operator::NotEq => {
+                    Operator::Gt | Operator::Lt | Operator::Eq | Operator::NotEq | Operator::GtEq | Operator::LtEq => {
                         if !Self::are_compatible_for_comparison(&left_type, &right_type) {
                             return Err(format!(
                                 "Incompatible types for {} operator: {:?} and {:?}",
