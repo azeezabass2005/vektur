@@ -1,7 +1,5 @@
 use std::{ffi::OsString, fs::File, io::{BufRead, BufReader}, iter, path::{Path, PathBuf}};
 
-use clap::Error;
-
 use crate::{ColumnVector, DataSource, DataType, Field, RecordBatch, ScalarValue, Schema, errors::QueryError};
 
 #[derive(Debug)]

@@ -4,6 +4,7 @@ pub mod datasource;
 pub mod cli;
 pub mod logical_plan;
 pub mod sql_support;
+pub mod physical_plan;
 
 pub use types::scalar::{ScalarValue, ColumnVector};
 pub use types::datatypes::DataType;

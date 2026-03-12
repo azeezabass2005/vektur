@@ -6,7 +6,7 @@ pub enum ScalarValue {
     Float64(Option<f64>)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ColumnVector {
     pub values: Vec<ScalarValue>,
 }

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::{Display, Formatter}};
+use std::{collections::HashMap, fmt::{Display, Formatter}, rc::Rc};
 
-use crate::{DataSource, DataType, Field, ScalarValue, Schema, datasource::csv::{CsvDataSource, ValidCsvPath}, errors::QueryError, logical_plan};
+use crate::{DataSource, DataType, Field, ScalarValue, Schema, datasource::csv::{CsvDataSource}, errors::QueryError};
 
 
 #[derive(Debug, Clone)]
@@ -232,7 +232,7 @@ impl Expression {
 }
 
 pub struct Catalog {
-    tables: HashMap<String, Box<dyn DataSource>>,
+    tables: HashMap<String, Rc<dyn DataSource>>,
 }
 
 impl Catalog {
@@ -242,7 +242,7 @@ impl Catalog {
         }
     }
 
-    pub fn register_table(&mut self, name: String,source: Box<dyn DataSource>, ) {
+    pub fn register_table(&mut self, name: String, source: Rc<dyn DataSource>) {
         self.tables.insert(name, source);
     }
 
@@ -255,9 +255,17 @@ impl Catalog {
             None => None
         }
     }
+
+    pub fn get_source(&self, table_name: &str) -> Result<Rc<dyn DataSource>, QueryError> {
+        self.tables.get(table_name)
+            .cloned()
+            .ok_or_else(|| QueryError::ValidationError {
+                message: format!("Table '{}' not found in catalog", table_name),
+            })
+    }
 }
 
-
+#[allow(dead_code)]
 pub struct ExecutionContext {
     catalog: Catalog
 }

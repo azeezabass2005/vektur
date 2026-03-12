@@ -1,4 +1,4 @@
-use crate::{Field, RecordBatch, Schema, errors::QueryError};
+use crate::{RecordBatch, Schema, errors::QueryError};
 
 pub trait DataSource {
     /// The schema method that returns the schema of every data source
