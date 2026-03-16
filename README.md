@@ -1,29 +1,63 @@
 # Vektur
 
-Vektur is a lightweight, educational query engine written in Rust from scratch.
+A tiny SQL query engine I'm building in Rust to learn how databases actually work under the hood.
 
-It parses and executes SQL queries over in-memory data, CSV files, and Parquet files, demonstrating core database concepts including type systems, expression evaluation, query planning, and vectorized execution.
+Right now it can parse SQL, plan a query, and run it against a CSV file. That's it. No JOINs, no aggregations, no fancy optimizer — just the bones of how a query goes from text to rows.
 
-## Features
+## Try it
 
-- **Custom Type System**: Native implementation of fundamental data types (integers, floats, strings, booleans) with null handling
-- **SQL Parser**: Converts SQL queries into an internal representation
-- **Query Optimization**: Logical and physical query planning with optimization passes
-- **Multiple Data Sources**: 
-  - In-memory tables
-  - CSV files
-  - Parquet files
-- **Vectorized Execution**: Columnar batch processing for efficient query execution
-- **Expression Engine**: Evaluates complex expressions, filters, and projections
+```
+cargo run
+```
 
-## Architecture
+There are some hardcoded queries in `main.rs` that run against `test/students.csv`. You'll see output like:
 
-Vektur is built in distinct layers, each responsible for a specific aspect of query processing:
+```
+SQL: SELECT Name, Email FROM students WHERE IsVerified = true
+Name | Email
+------------
+Student 1 | student1@gmail.com
+Student 2 | student2@gmail.com
+...
+(150 rows)
+```
 
-1. **Type System** - Defines data types and schemas
-2. **Expression Representation** - Internal representation of computations
-3. **Data Sources** - Abstraction over different data formats
-4. **SQL Parser** - Converts SQL text into Abstract Syntax Trees
-5. **Logical Planning** - Query optimization at the logical level
-6. **Physical Planning** - Execution strategy selection
-7. **Execution Engine** - Actual query execution and result computation
+## What works
+
+- `SELECT` with specific columns or `*`
+- `WHERE` with `=`, `!=`, `>`, `<`, `>=`, `<=`
+- Arithmetic (`+`, `-`, `*`, `/`)
+- `NOT`, `IS NULL`, `IS NOT NULL`
+- Types: integers, floats, strings, booleans (all nullable)
+- CSV files with automatic schema inference
+
+## How the pipeline works
+
+```
+SQL string  -->  AST  -->  LogicalPlan  -->  PhysicalPlan  -->  rows
+               (parse)    (what to do)     (how to do it)    (do it)
+```
+
+The logical plan is a tree of operations (scan, filter, project) that works with column names. The physical planner turns that into executable code where columns are referenced by index instead of name. Execution is pull-based — each operator lazily pulls batches from the one below it.
+
+## Files
+
+```
+src/
+  types/           -- DataType, ScalarValue, ColumnVector, Schema, RecordBatch
+  datasource/      -- DataSource trait + CSV reader (reads in batches of 16 rows)
+  logical_plan/    -- Expression, LogicalPlan, PlanBuilder, Catalog
+  sql_support/     -- SQL parsing (via sqlparser) and conversion to LogicalPlan
+  physical_plan/   -- PhysicalExpr, PhysicalPlan, and the planner that bridges
+                      logical -> physical
+  errors.rs
+  main.rs
+
+test/
+  students.csv     -- 200 rows of fake student data
+  users.csv
+```
+
+## Not doing
+
+No JOINs, no GROUP BY/aggregation, no ORDER BY/LIMIT, no subqueries, no writes, no query optimization, no data sources other than CSV. Maybe someday, but the point is to understand the fundamentals first.
